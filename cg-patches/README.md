@@ -10,7 +10,7 @@ worker noise on `psyleague`).
 
 ## Branch / version policy
 
-- `cg-patched-v4.7.7` — based on upstream `v4.7.7`, version pinned to `4.7.7-cg-patched.1`
+- `cg-patched-v4.7.7` — based on upstream `v4.7.7`, version pinned to `4.7.7-cg-patched.2`
   (or `.2`, `.3` ... if patches are added)
 - New SDK release: branch off the new upstream tag, rebase patches, bump tag
 
@@ -19,9 +19,9 @@ upstream is `git log v4.7.7..cg-patched-v4.7.7`.
 
 ## Coordinates after `mvn install`
 
-- `com.codingame.gameengine:core:4.7.7-cg-patched.1`
-- `com.codingame.gameengine:runner:4.7.7-cg-patched.1`
-- `com.codingame.gameengine:module-endscreen:4.7.7-cg-patched.1`
+- `com.codingame.gameengine:core:4.7.7-cg-patched.2`
+- `com.codingame.gameengine:runner:4.7.7-cg-patched.2`
+- `com.codingame.gameengine:module-endscreen:4.7.7-cg-patched.2`
 
 The groupId stays `com.codingame.gameengine` (so upstream referee poms only need
 to bump `<gamengine.version>`); the version suffix `-cg-patched.N` ensures we
@@ -53,6 +53,16 @@ CG_MAX_TURN_TIME=200000 \
 `MIN_TURN_TIME` is intentionally NOT env-overridable (changes here are
 interpreted as bug fixes upstream, not local experiments).
 
+### Backwards-compat API patches
+
+Pre-v4.5.0 referees called some APIs that upstream later removed for type safety.
+Re-adding them here as **additive** overloads lets older referees compile against
+the patched fork without runtime impact on v4.5+ code.
+
+| API restored | Why upstream dropped it | Affected referees |
+|---|---|---|
+| `GameManager.putMetadata(String, String)` | Replaced with `(String, double)` in v4.5.0 (commit `6442c831`) | Spring/Fall 2023 (e.g. SeabedSecurity), all earlier 1v1 contests |
+
 ### `Referee` per-game settings (set on each contest's referee, not in this repo)
 
 These three are env-ized by [`tools/referee_patch/patch_referee_envint.py`](https://github.com/hashiryo/CodingameTemplate/blob/main/tools/referee_patch/patch_referee_envint.py)
@@ -76,5 +86,5 @@ mvn install -DskipTests -Dgpg.skip=true \
 ```
 
 After install, any contest referee whose pom asks for
-`<gamengine.version>4.7.7-cg-patched.1</gamengine.version>` will pick up the
+`<gamengine.version>4.7.7-cg-patched.2</gamengine.version>` will pick up the
 patched jars from `~/.m2/`.

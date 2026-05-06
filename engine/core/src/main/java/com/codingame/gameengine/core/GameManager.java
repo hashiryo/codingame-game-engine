@@ -415,6 +415,21 @@ abstract public class GameManager<T extends AbstractPlayer> {
     }
 
     /**
+     * cg-patched: backwards-compat overload for old (&lt; v4.5.0) referees that called
+     * putMetadata(String, String). Upstream removed this overload in commit 6442c831
+     * ("fix(sdk): fix metadata api") for type safety, but it broke local builds of
+     * Spring/Fall 2023 etc. referees that pre-date the change. This additive overload
+     * lets those referees compile against the patched fork without runtime impact on
+     * v4.5+ code (which uses the (String, double) overload).
+     *
+     * @param key   the property to send
+     * @param value the property's value as a string (as the old upstream API took)
+     */
+    public final void putMetadata(String key, String value) {
+        metadata.put(key, value);
+    }
+
+    /**
      * Specifies the frameDuration in milliseconds. Default: 1000ms
      * 
      * @param frameDuration
