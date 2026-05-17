@@ -10,7 +10,7 @@ worker noise on `psyleague`).
 
 ## Branch / version policy
 
-- `cg-patched-v4.7.7` — based on upstream `v4.7.7`, version pinned to `4.7.7-cg-patched.2`
+- `cg-patched-v4.7.7` — based on upstream `v4.7.7`, version pinned to `4.7.7-cg-patched.3`
   (or `.2`, `.3` ... if patches are added)
 - New SDK release: branch off the new upstream tag, rebase patches, bump tag
 
@@ -19,9 +19,9 @@ upstream is `git log v4.7.7..cg-patched-v4.7.7`.
 
 ## Coordinates after `mvn install`
 
-- `com.codingame.gameengine:core:4.7.7-cg-patched.2`
-- `com.codingame.gameengine:runner:4.7.7-cg-patched.2`
-- `com.codingame.gameengine:module-endscreen:4.7.7-cg-patched.2`
+- `com.codingame.gameengine:core:4.7.7-cg-patched.3`
+- `com.codingame.gameengine:runner:4.7.7-cg-patched.3`
+- `com.codingame.gameengine:module-endscreen:4.7.7-cg-patched.3`
 
 The groupId stays `com.codingame.gameengine` (so upstream referee poms only need
 to bump `<gamengine.version>`); the version suffix `-cg-patched.N` ensures we
@@ -52,6 +52,25 @@ CG_MAX_TURN_TIME=200000 \
 
 `MIN_TURN_TIME` is intentionally NOT env-overridable (changes here are
 interpreted as bug fixes upstream, not local experiments).
+
+### `Agent` stderr drain ([Agent.java](runner/src/main/java/com/codingame/gameengine/runner/Agent.java))
+
+Upstream `readError()` performs a single 4096-byte read per turn. A bot that
+prints more than ~4 KB / turn to `cerr` (typical for verbose dbgln-style
+logging) fills the OS pipe (~64 KB on Linux/macOS), at which point the bot's
+next `cerr <<` blocks inside the kernel, the bot misses its turn deadline, and
+the referee kills it with a timeout — usually around turn 30-40 in a 50ms /
+200-turn game. The patch loop-drains the pipe up to a per-turn cap.
+
+| Env var | Default | Effect |
+|---|---|---|
+| `CG_STDERR_DRAIN_PER_TURN` | `65536` | Max bytes drained from each agent's stderr per turn. Raise if a verbose bot still chokes. |
+| `CG_STDERR_THRESHOLD` | `204800` | Cumulative-bytes threshold (per agent) above which the drain is throttled to 1024 bytes / turn. NOTE: upstream never increments the `totalStderrBytesSent` counter that this is compared against, so the throttle is effectively a no-op in both upstream and the patched fork — we preserve that exact behavior (= no behavior regression vs upstream). The env var exists for forward compat if upstream ever fixes the counter. |
+
+These are separate concerns: the **drain** is how much we pull off the pipe
+each turn (must be ≥ peak bytes/turn the bot emits, or it will block); the
+**throttle** is the (currently vestigial) defense against a bot that spams
+stderr for the whole game.
 
 ### Backwards-compat API patches
 
@@ -86,5 +105,5 @@ mvn install -DskipTests -Dgpg.skip=true \
 ```
 
 After install, any contest referee whose pom asks for
-`<gamengine.version>4.7.7-cg-patched.2</gamengine.version>` will pick up the
+`<gamengine.version>4.7.7-cg-patched.3</gamengine.version>` will pick up the
 patched jars from `~/.m2/`.

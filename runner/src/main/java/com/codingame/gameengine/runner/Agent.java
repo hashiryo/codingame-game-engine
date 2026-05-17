@@ -13,7 +13,15 @@ abstract class Agent {
 
     public static final Charset UTF8 = Charset.forName("UTF-8");
     public static final int AGENT_MAX_BUFFER_SIZE = 10_000;
-    public static final int THRESHOLD_LIMIT_STDERR_SIZE = 4096 * 50;
+    // cg-patched: env-overridable stderr drain + throttle (see cg-patches/README.md)
+    public static final int THRESHOLD_LIMIT_STDERR_SIZE = cgPatchedEnvInt("CG_STDERR_THRESHOLD", 4096 * 50);
+    private static final int STDERR_DRAIN_PER_TURN = cgPatchedEnvInt("CG_STDERR_DRAIN_PER_TURN", 65536);
+
+    private static int cgPatchedEnvInt(String key, int defaultVal) {
+        String v = System.getenv(key);
+        if (v == null || v.isEmpty()) return defaultVal;
+        try { return Integer.parseInt(v.trim()); } catch (NumberFormatException e) { return defaultVal; }
+    }
 
     private static Log log = LogFactory.getLog(Agent.class);
 
@@ -161,21 +169,28 @@ abstract class Agent {
             return null;
         }
         try {
-            if (processStderr.available() > 0) {
-                int limitStderrSize = 4096;
-                if (totalStderrBytesSent > THRESHOLD_LIMIT_STDERR_SIZE) {
-                    limitStderrSize = 1024;
-                }
-
-                byte[] tmp = new byte[limitStderrSize];
-                int nbRead = processStderr.read(tmp, 0, limitStderrSize);
-                return new String(tmp, 0, nbRead, UTF8);
-
+            if (processStderr.available() <= 0) {
+                return null;
             }
+            // cg-patched: drain up to STDERR_DRAIN_PER_TURN bytes per turn (was a single
+            // 4096-byte read upstream, which let verbose bots accumulate in the OS pipe
+            // until cerr blocked and the bot timed out). 200KB throttle preserved exactly
+            // as upstream — totalStderrBytesSent is never incremented in upstream and we
+            // do not change that here (the throttle is effectively vestigial; raising it
+            // via CG_STDERR_THRESHOLD is still supported for forward compat).
+            int limit = (totalStderrBytesSent > THRESHOLD_LIMIT_STDERR_SIZE) ? 1024 : STDERR_DRAIN_PER_TURN;
+            byte[] tmp = new byte[limit];
+            int total = 0;
+            while (total < limit) {
+                if (processStderr.available() <= 0) break;
+                int nbRead = processStderr.read(tmp, total, limit - total);
+                if (nbRead <= 0) break;
+                total += nbRead;
+            }
+            return new String(tmp, 0, total, UTF8);
         } catch (IOException e) {
             return null;
         }
-        return null;
     }
 
     public int getAgentId() {
